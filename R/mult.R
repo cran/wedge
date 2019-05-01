@@ -1,0 +1,261 @@
+`ktensor` <- function(S){
+  stopifnot(is.spray(S))
+  stopifnot(all(index(S)>0))
+  class(S) <- c("ktensor","spray")  # This is the only place class ktensor is set
+  return(S)
+}
+
+`as.ktensor` <- function(M,coeffs){
+    if(inherits(M,"spray")){return(ktensor(M))}
+    ktensor(spray(M,coeffs))
+}
+
+`as.function.ktensor` <- function(x, ...){
+    stopifnot(inherits(x,"ktensor"))
+    v <- value(x)
+    M <- index(x)
+    k <- seq_len(ncol(M))
+    p <- seq_len(nrow(M))
+    function(E){
+      sum(sapply(p,function(i){v[i]*prod(E[cbind(M[i,],k)])}))
+    }
+}
+
+`lose_repeats` <- function(S){
+    I <- index(S)
+    if(length(I)>0){  # cannot use nrow(I)==0, as 'I' might be NULL
+      wanted <- apply(I,1,function(x){all(table(x)==1)})
+      out <- spray(I[wanted,,drop=FALSE],value(S)[wanted])
+    } else {
+      out <- S
+    }
+    return(out)
+}
+
+`consolidate` <- function(S){  # S is a spray object corresponding to an alternating form
+    I <- index(S)
+    if(length(I)==0){return(S)}
+    newind <- 0*I
+    change_sign <- numeric(nrow(I))
+    for(i in seq_len(nrow(I))){
+        o <- I[i,]
+        newind[i,] <- sort(o)
+        jj <- word(rbind(order(o)))
+        if(is.id(jj)){
+            change_sign[i] <- 1
+        } else {
+            change_sign[i] <- sgn(jj) # which might be 1
+        }
+    }  # i loop closes
+
+    out <- spray(newind, value(S)*change_sign, addrepeats=TRUE)  # does a lot of work (potentially)
+    if(length(index(out))==0){ # zero form
+      out <- spray(matrix(0,0,ncol(I)))
+    }
+
+    return(out)
+      
+}
+
+`include_perms` <- function(S){ # S is a spray object
+    k <- ncol(index(S))
+    p <- allperms(k)
+
+    f <- function(v,x){ # v is a vector, one row of an index matrix; x is its coeff
+        spray(matrix(v[p],nrow(p),k),sgn(p)*x)
+    }
+
+    out <- f(index(S)[1,,drop=TRUE],value(S)[1]) # do the first row first, then...
+    for(i in seq_len(nrow(index(S)))[-1]){  # ...do the other rows
+        out <- out + f(index(S)[i,,drop=TRUE],value(S)[i])
+    }
+    return(out)  # should be in alternating form
+}
+    
+`Alt` <- function(S){ # Returns Alt(S), an alternating multilinear
+                      # function (mathematically equivalent to a form,
+                      # but including redundancy)
+
+  ## works in three steps.  Firstly, lose the repeats (that is, rows
+  ## with a repeated index, as in [1,3,4,1,2] ("1" appears twice).
+  ## Then, sort the rows.  Then, sum over all orderings:
+
+    S %<>% lose_repeats
+    if(nrow(index(S))==0){  # the zero form
+        return(S)
+    }
+
+    ktensor(include_perms(consolidate(S))/factorial(ncol(index(S))))
+}
+
+`cross` <- function(x, ...) {
+   if(nargs()<3){
+     cross2(x,...)
+   } else {
+     cross2(x, Recall(...))
+   }
+}
+
+`cross2` <- function(S1,S2){  # returns S1\otimes S2
+    if(is.empty(S1) | is.empty(S2)){
+      return(as.ktensor(cbind(index(S1)[0,],index(S2)[0,])))
+    }
+
+    M1 <- index(S1)
+    M2 <- index(S2)
+    jj <- as.matrix(expand.grid(seq_len(nrow(M1)),seq_len(nrow(M2))))
+    f <- function(i){c(M1[jj[i,1],],M2[jj[i,2],])}
+    ktensor(spray(t(sapply(seq_len(nrow(jj)),f)),c(outer(value(S1),value(S2)))))
+}
+
+`%X%` <- function(x,y){cross(x,y)}
+
+`wedge` <- function(x, ...) {
+   if(nargs()<3){
+     wedge2(x,...)
+   } else {
+     wedge2(x, Recall(...))
+   }
+}
+
+`wedge2` <- function(F1,F2){
+
+  if(`|`(!inherits(F1,"kform"), !inherits(F2,"kform"))){return(F1*F2)}
+
+  if(is.empty(F1) | is.empty(F2)){
+    return(as.kform(cbind(index(F1)[0,],index(F2)[0,])))
+    }
+
+  ## we need to go through F1 and F2 line by line (wedge product is
+  ## left- and right- distributive).
+  
+  ind1 <- index(F1)
+  var1 <- value(F1)
+  ind2 <- index(F2)
+  var2 <- value(F2)
+  
+  n1 <- length(var1)
+  n2 <- length(var2)
+
+  f <- function(i){c(ind1[i[1],,drop=TRUE],ind2[i[2],,drop=TRUE])}
+  M <- expand.grid(seq_len(n1),seq_len(n2)) %>% apply(1,f) %>% t
+  as.kform(M, c(outer(var1,var2)))
+}
+
+`%^%` <- function(x,y){wedge(x,y)}
+
+`kform_basis` <- function(n,k){  # just a matrix (a low-level helper function)
+    if(k==1){return(as.matrix(seq_len(n)))}
+    f <- function(x){which(x>0)}
+    t(apply(blockparts(rep(1,n),k),2,f))
+}
+
+`kform` <- function(S){
+    stopifnot(is.spray(S))
+    stopifnot(all(index(S)>0))
+    S <- consolidate(lose_repeats(S))
+    class(S) <- c("kform", "spray")   # This is the only class setter for kform objects
+    return(S)
+}
+
+`as.kform` <- function(M,coeffs){
+    if(inherits(M,"spray")){return(kform(M))}
+    return(kform(spray(M,coeffs)))
+}
+
+`kform_general`  <- function(W,k,coeffs){
+    if(length(W)==1){W <- seq_len(W)}
+    M <-  kform_basis(length(W),k)
+    M[] <- W[M]
+    as.kform(M,coeffs)
+}
+
+`as.function.kform` <- function(x,...){
+    M <- index(x)
+    coeffs <- value(x)
+    return(function(E){
+      out <- 0
+      for(i in seq_len(nrow(M))){
+        out <- out + coeffs[i]*det(E[M[i,,drop=TRUE],,drop=FALSE])
+      }
+      return(out)
+    })
+}
+
+`rform` <- function(terms=9, k=3, n=7, coeffs){
+    kform(spray(t(replicate(terms,sample(seq_len(n),k))),coeffs,addrepeats=TRUE))
+}
+
+`rtensor` <- function(terms=9,k=3, n=7, coeffs){
+    M <- matrix(sample(seq_len(n),terms*k,replace=TRUE),terms,k)
+    ktensor(spray(M,coeffs,addrepeats=TRUE))
+}
+    
+`as.1form` <- function(v){
+    kform(spray(cbind(seq_along(v)),v))
+}
+`grad` <- as.1form
+
+`.putw` <- function(v,symbols,prodsymb,d){  # eg v=(1,3,4,7)
+  out <- paste(paste(d,symbols[v],sep=""),prodsymb,sep="",collapse="")
+  return(substr(out, 1, nchar(out)-1) )
+}
+
+`as.symbolic` <- function(K,symbols=letters,d=""){
+  if(inherits(K,"kform")){
+    prodsymb <- "^"
+  } else if(inherits(K,"ktensor")){
+    prodsymb <- "*"
+  } else {
+    stop("only takes ktensor or kform objects")
+  }
+  
+  M <- index(K)
+  v <- value(K)
+
+  out <- ""
+  for(i in seq_len(nrow(M))){
+    if(v[i] == 1){
+      jj <- "+"
+    } else if(v[i] == -1){
+      jj <- "-"
+    } else if(v[i] > 0){
+      jj <- paste("+",v[i],sep="")
+    } else if(v[i] < 0){
+      jj <- v[i]
+    } else {
+      stop("this cannot happen")
+    }
+    out <- paste(out, paste(jj,.putw(M[i,],symbols,prodsymb=prodsymb,d=d),sep=" "))
+  }
+  return(noquote(out))
+}
+
+`hodge` <- function(K, n=max(index(K)), g=rep(1,n)){
+  if(is.empty(K)){
+      if(is.infinite(n)){
+          stop("K is zero but no value of n is supplied")
+      } else {
+          return(kform(spray(matrix(1,0,n-arity(K)),1)))
+      }
+  } else {  # K not empty
+      stopifnot(n >= max(index(K)))
+  }
+  iK <- index(K)
+  f1 <- function(o){seq_len(n)[!seq_len(n) %in% o]}
+  f2 <- function(x){sgn(as.word(x))}
+  f3 <- function(v){prod(g[v])}
+  jj <- apply(iK,1,f1)
+  if(is.matrix(jj)){
+    newindex <- t(jj)
+  } else {
+    newindex <- as.matrix(jj)
+  }
+  newcoeffs <- apply(cbind(iK,newindex),1,f2)*apply(iK,1,f3)*value(K)
+  as.kform(newindex,newcoeffs)
+}
+
+`inner` <- function(M){
+    ktensor(spray(expand.grid(seq_len(nrow(M)),seq_len(ncol(M))),c(M)))
+}
+

@@ -1,0 +1,638 @@
+---
+title: "Exterior calculus with R"
+author: "Robin K. S. Hankin"
+date: "`r Sys.Date()`"
+vignette: >
+  %\VignetteIndexEntry{The exterior calculus}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+
+# The exterior calculus
+
+Ordinary differential calculus may be generalized to
+arbitrary-dimensional oriented manifolds using the exterior calculus.
+Here I show how the wedge package furnishes functionality for working
+with the exterior calculus, and provide numerical verification of a
+number of theorems.
+
+Notation follows that of Spivak, and Hubbard and Hubbard.
+
+```{r,echo=FALSE,print=FALSE,results='hide'}
+require("wedge",quietly=TRUE,warn.conflicts=FALSE)
+require("Deriv",quietly=TRUE,warn.conflicts=FALSE)
+```
+
+Recall that a $k$-tensor is a multilinear map $S\colon
+V^k\longrightarrow\mathbb{R}$, where $V=\mathbb{R}^n$ is considered as
+a vector space; Spivak denotes the space of multilinear maps as
+$\mathcal{J}^k(V)$.  Formally, multilinearity means
+
+\[
+S\left(v_1,\ldots,av_i,\ldots,v_k\right)=a\cdot S\left(v_1,\ldots,v_i,\ldots,v_k\right)
+\]
+
+and
+
+\[S\left(v_1,\ldots,v_i+{v_i}',\ldots,v_k\right)=S\left(v_1,\ldots,v_i,\ldots,x_v\right)+
+S\left(v_1,\ldots,{v_i}',\ldots,v_k\right).
+\]
+
+where $v_i\in V$.  If $S\in\mathcal{J}^k(V)$ and
+$T\in\mathcal{J}^l(V)$, then we may define $S\otimes
+T\in\mathcal{J}^{k+l}(V)$ as
+
+\[
+S\otimes T\left(v_1,\ldots,v_k,v_{k+1},\ldots,v_{k+l}\right)=
+S\left(v_1,\ldots,v_k\right)\cdot
+T\left(v_1,\ldots,v_l\right)
+\]
+
+
+Spivak observes that $\mathcal{J}^k(V)$ is spanned by the $n^k$
+products of the form
+
+\[
+\phi_{i_1}\otimes\phi_{i_2}\otimes\ldots\otimes\phi_{i_k}\qquad
+1\leq i_i,i_2,\ldots,i_k\leq n
+\]
+
+where $v_1,\ldots,v_k$ is a basis for $V$ and
+$\phi_i\left(v_j\right)=\delta_{ij}$; we can therefore write
+
+\[
+S=\sum_{1\leq i_1,\ldots,i_k\leq n} a_{i_1\ldots i_k} 
+\phi_{i_1}\otimes\ldots\otimes\phi_{i_k}.
+\]
+
+The space spanned by such products has a natural representation in R
+as an array of dimensions $n\times\cdots\times n$.  If ```A``` is such
+an array, then the element ```A[i_1,i_2,...,i_k]``` is the coefficient
+of $\phi_{i_1}\otimes\ldots\otimes\phi_{i_k}$.  However, it is more
+efficient and conceptually cleaner to consider a *sparse* array.
+Considering the case $n=5,k=4$
+
+We can test these identities in R using the idiom furnished by the
+wedge package:
+
+```{r}
+k <- 4
+n <- 5
+M <- matrix(c(5,1,1,1, 1,1,2,3, 1,3,4,2),3,4,byrow=TRUE)
+M
+S <- as.ktensor(M,coeffs= 0.5 + 1:3)
+S
+```
+
+So $S$ is a 4-tensor, mapping $V^4$ to $\mathbb{R}$, where
+$V=\mathbb{R}^5$.  Here we have
+$S=1.5\phi_5\otimes\phi_1\otimes\phi_1\otimes\phi_1+2.5\phi_1\otimes\phi_1\otimes\phi_2\otimes\phi_3+3.5\phi_1\otimes\phi_3\otimes\phi_4\otimes\phi_2$.
+Note that on some implementations the row order of object ```S``` will
+differ from that of ```M```.  We will define $E$ to be a random point
+in $V^k$ in terms of a matrix:
+
+```{r}
+E <- matrix(rnorm(n*k),n,k)   # A random point in V^k
+```
+
+Then
+
+```{r}
+f <- as.function(S)
+f(E)
+```
+
+Testing  multilinearity is straightforward in the package:
+```{r}
+
+E1 <- E
+E2 <- E
+E3 <- E
+
+x1 <- rnorm(n)
+x2 <- rnorm(n)
+r1 <- rnorm(1)
+r2 <- rnorm(1)
+
+E1[,2] <- x1
+E2[,2] <- x2
+E3[,2] <- r1*x1 + r2*x2
+```
+
+Then we can verify the multilinearity of $S$:
+
+```{r}
+
+f <- as.function(S)
+c(r1*f(E1) + r2*f(E2), f(E3)) # should match
+```
+
+
+Note that this is *not* equivalent to linearity over $V^{nk}$:
+
+
+```{r}
+E1 <- matrix(rnorm(n*k),n,k)
+E2 <- matrix(rnorm(n*k),n,k)
+c(f(E1+E2),f(E1)+f(E2))
+```
+
+Given two k-tensor objects $S,T$ we can form the cross product
+$S\otimes T$, defined as
+
+\[
+S\otimes T\left(v_1,\ldots,v_k,v_{k+1},\ldots, v_{k+l}\right)=
+  S\left(v_1,\ldots v_k\right)\cdot T\left(v_{k+1},\ldots
+  v_{k+l}\right)
+\]
+
+
+```{r}
+S1 <- ktensor(spray(cbind(1:3,2:4),1:3))
+S2 <- as.ktensor(matrix(1:6,2,3))
+S1
+S2
+```
+
+The R idiom for $S1\otimes S2$ would be ```cross()```, or ```%X%```:
+
+
+```{r}
+cross(S1,S2)
+```
+
+Then, for example:
+
+```{r}
+as.function(cross(S1,S2))(matrix(rnorm(30),6,5))
+```
+
+# Alternating forms
+
+An alternating form is a multilinear map $T$ satisfying
+
+\[
+\mathrm{T}\left(v_1,\ldots,v_i,\ldots,v_j,\ldots,v_k\right)=
+    -\mathrm{T}\left(v_1,\ldots,v_j,\ldots,v_i,\ldots,v_k\right)
+\]
+
+(or, equivalently,
+$\mathrm{T}\left(v_1,\ldots,v_i,\ldots,v_i,\ldots,v_k\right)= 0$).  We
+write $\Lambda^k(V)$ for the space of all alternating multilinear maps
+from $V^k$ to $\mathbb{R}$.  Spivak gives
+$\operatorname{Alt}\colon\mathcal{J}^k(V)\longrightarrow\Lambda^k(V)$
+defined by
+
+\[\operatorname{Alt}(T)\left(v_1,\ldots,v_k\right)=
+    \frac{1}{k!}\sum_{\sigma\in S_k}\operatorname{sgn}(\sigma)\cdot
+    T\left(v_{\sigma(1)},\ldots,v_{\sigma(k)}\right)
+\]
+
+where the sum ranges over all permutations of
+$\left[n\right]=\left\{1,2,\ldots,n\right\}$ and
+$\operatorname{sgn}(\sigma)\in\pm 1$ is the sign of the permutation.
+If $T\in\mathcal{J}^k(V)$ and $\omega\in\Lambda^k(V)$, it is
+straightforward to prove that $\operatorname{Alt}(T)\in\Lambda^k(V)$,
+$\operatorname{Alt}\left(\operatorname{Alt}\left(T\right)\right)=\operatorname{Alt}\left(T\right)$,
+and $\operatorname{Alt}\left(\omega\right)=\omega$.
+
+In the wedge package, this is effected by the ```Alt()``` function:
+
+
+```{r}
+S1
+Alt(S1)
+```
+
+And verifying that it is in fact alternating is straightforward:
+
+```{r}
+E <- matrix(rnorm(8),4,2)
+Erev <- E[,2:1]
+as.function(Alt(S1))(E) + as.function(Alt(S1))(Erev)  # should be zero
+```
+
+However, we can see that this form for alternating tensors (here
+called $k$-forms) is inefficient and highly redundant.  The package
+provides ```kform``` objects which are inherently alternating; they are described using  wedge products which are discussed next.
+
+## Wedge products and the exterior calculus
+
+This section follows the exposition of Hubbard and Hubbard, who
+introduce the exterior calculus starting with a discussion of
+elementary forms.  An elementary form is an object such as $dx_1\wedge
+dx_3$, which is an alternating linear map from
+$\mathbb{R}^n\times\mathbb{R}^n$ to $\mathbb{R}$ with
+
+\[
+\left(
+dx_1\wedge dx_3
+\right)\left(
+\begin{pmatrix}a_1\\a_3\\ \vdots\\ a_n\end{pmatrix},
+\begin{pmatrix}b_1\\b_3\\ \vdots\\ b_n\end{pmatrix}
+\right)=\mathrm{det}
+\begin{pmatrix} a_1 & b_1 \\ a_3 & b_3\end{pmatrix}
+=a_1b_3-a_3b_1
+\]
+
+That this is alternating follows from the properties of the
+determinant.  Because such objects are linear, it is possible to
+consider more complicated forms such as $dx_1\wedge dx_2 + 3
+dx_2\wedge dx_3$ with
+
+\[
+\left(
+dx_1\wedge dx_2 + 3dx_2\wedge dx_3
+\right)\left(
+\begin{pmatrix}a_1\\a_2\\ \vdots\\ a_n\end{pmatrix},
+\begin{pmatrix}b_1\\b_2\\ \vdots\\ b_n\end{pmatrix}
+\right)=\mathrm{det}
+\begin{pmatrix} a_1 & b_1\\ a_2 & b_2\end{pmatrix}
++3\mathrm{det}
+\begin{pmatrix} a_2 & b_2\\ a_3 & b_3\end{pmatrix}
+\]
+
+or even $dx_1\wedge dx_2\wedge dx_3 +5dx_1\wedge dx_2\wedge dx_4$
+which would be a linear map from $\left(\mathbb{R}^n\right)^3$ to
+$\mathbb{R}$ with
+
+
+\[
+\left(
+dx_4\wedge dx_2\wedge dx_3 +5dx_1\wedge dx_2\wedge dx_4
+\right)\left(
+\begin{pmatrix}a_1\\a_2\\ \vdots\\ a_n\end{pmatrix},
+\begin{pmatrix}b_1\\b_2\\ \vdots\\ b_n\end{pmatrix},
+\begin{pmatrix}c_1\\c_2\\ \vdots\\ c_n\end{pmatrix}
+\right)=\mathrm{det}
+\begin{pmatrix}
+	a_4 & b_4 & c_4\\
+	a_2 & b_2 & c_2\\
+	a_3 & b_3 & c_3
+\end{pmatrix}
++5\mathrm{det}
+\begin{pmatrix}
+	a_1 & b_1 & c_1\\
+	a_2 & b_2 & c_2\\
+	a_4 & b_4 & c_4
+\end{pmatrix}.
+\]
+
+Taking the last form as an example, this has ready R idiom:
+
+```{r}
+M <- matrix(c(4,2,3,1,2,4),2,3,byrow=TRUE)
+M
+K <- as.kform(M,c(1,5))
+K
+```
+
+Note that the order of the rows in ```K``` is immaterial and indeed in
+some implementations will appear in a different order: the wedge
+package uses the spray package, which in turn utilises the STL map
+class of C++.
+
+Spivak observes that $\Lambda^k(V)$ is spanned by the $n\choose k$
+wedge products of the form
+
+\[
+dx_{i_1}\wedge dx_{i_2}\wedge\ldots\wedge dx_{i_k}\qquad
+1\leq i_i<i_2<\cdots <i_k\leq n
+\]
+
+and these products are called elementary forms: every element of the
+space $\Lambda^k(V)$ is a linear combination of elementary forms, as
+illustrated in the package by function ```kform_general()```.
+Consider the following idiom:
+
+
+```{r}
+Krel <- kform_general(4,2,1:6)
+Krel
+```
+
+Object ```Krel``` is a two-form, specifically a map from
+$\left(\mathbb{R}^4\right)^2$ to $\mathbb{R}$.  Observe that
+```Krel``` has ${4\choose 2}=6$ components, which do not appear in any
+particular order.
+
+## Formal definition of wedge product
+
+Given two alternating forms $\omega,\eta$, Spivak defines the wedge
+product $\omega\wedge\eta\in\Lambda^{k+l}(V)$ as
+
+\[
+\omega\wedge\eta={k+l\choose k\,l}\operatorname{Alt}(\omega\otimes\eta)
+\]
+
+and this is implemented in the package by function ```wedge()```, or,
+more idiomatically, ```%^%```:
+
+```{r}
+M1 <- matrix(c(3,4,5, 4,6,1),2,3,byrow=TRUE)
+K1 <- as.kform(M1,c(2,7))
+K1
+M2 <- cbind(1:5,3:7)
+K2 <- as.kform(M2,1:5)
+K2
+K1 %^% K2
+
+```
+
+See how the wedge product eliminates rows with repeated entries,
+gathers permuted rows together (respecting the sign of the
+permutation), and expresses the result in terms of elementary forms.
+The product is a linear combination of two elementary forms but only
+two coefficients are nonzero out of a possible ${7\choose 5}=21$
+terms.  Note again that the order of the rows in the product is
+arbitrary.
+
+The wedge product has formal properties such as distributivity but by
+far the most interesting one is associativity, which I will
+demonstrate below:
+
+```{r}
+F1 <- as.kform(matrix(c(3,4,5, 4,6,1,3,2,1),3,3,byrow=TRUE))
+F2 <- as.kform(cbind(1:6,3:8),1:6)
+F3 <- kform_general(1:8,2)
+(F1 %^% F2) %^% F3
+F1 %^% (F2 %^% F3)
+```
+
+
+Note carefully in the above that the terms in ```(F1 %^% F2) %^% F3```
+and ```F1 %^% (F2 %^% F3)``` appear in a different order.  They are
+nevertheless algebraically identical:
+
+
+```{r}
+(F1 %^% F2) %^% F3 - F1 %^% (F2 %^% F3)
+```
+
+
+## Exterior derivatives
+
+Hubbard and Hubbard define the exterior derivative $d\phi$ (they use a
+bold font, $\mathbf{d}\phi$) of the $k$-form $\phi$ as the
+$(k+1)$-form given by
+
+\[  {d}\phi
+  \left({v}_i,\ldots,{v}_{k+1}\right)
+  =
+  \lim_{h\longrightarrow 0}\frac{1}{h^{k+1}}\int_{\partial
+  P_{x}\left(h{v}_1,\ldots,h{v}_{k+1}\right)}\phi
+\]
+
+which, by their own account, is a rather opaque mathematical idiom.
+However, the definition makes sense and it can be shown that
+
+\[
+    {d}\left(f\,dx_{i_1}\wedge\cdots\wedge dx_{i_k}\right)=
+    {d}f\wedge dx_{i_1}\wedge\cdots\wedge dx_{i_k}
+\]
+
+where $f\colon\mathbb{R}^n\longrightarrow\mathbb{R}$ is a scalar
+function of position.  The package provides ```grad()```, which when
+given a vector $x_1,\ldots,x_n$ returns the one-form
+
+
+\[
+\sum_{i=1}^n x_idx_i
+\]
+
+This is useful because $df=\sum_{j=1}^n\left(D_j f\right)\,dx_j$. Thus
+
+```{r}
+grad(c(0.4,0.1,-3.2,1.5))
+```
+
+We will use the ```grad()``` function to verify that, in
+$\mathbb{R}^n$, a certain $(k-1)$-form has zero work function.
+Motivated by the fact that
+
+\[
+F_3=\frac{1}{\left(x^2+y^2+z^2\right)^{3/2}}
+\begin{pmatrix}x\\y\\z\end{pmatrix}
+\]
+
+is a divergenceless velocity field in $\mathbb{R}^3$, H\&H go on to define
+
+\[
+\omega_n=
+d\frac{1}{\left(x_1^2+\ldots +x_n^2\right){^n/2}}\sum_{i=1}^{n}(-1)^{i-1}
+x_idx_1\wedge\cdots\wedge\widehat{dx_i}\wedge\cdots\wedge dx_n
+\]
+
+(where a hat indicates the absence of a term), and show analyically
+that $d\omega=0$.  Here I show this using R idiom.  The first thing is
+to define a function that implements the hat:
+
+
+```{r}
+f <- function(x){
+    n <- length(x)
+    as.kform(t(apply(diag(n)<1,2,which)))
+}
+```
+
+So, for example:
+
+```{r}
+f(1:5)
+```
+
+Then we can use the ```grad()``` function to calculate $d\omega$,
+using the quotient law to express the derivatives analytically:
+
+```{r}
+df  <- function(x){
+    n <- length(x)
+    S <- sum(x^2)
+    grad(rep(c(1,-1),length=n)*(S^(n/2) - n*x^2*S^(n/2-1))/S^n
+    )
+}
+```
+
+Thus
+```{r}
+df(1:5)
+```
+
+Now we can use the wedge product of the two parts to show that the exterior derivative is zero:
+
+```{r}
+x <- rnorm(9)
+print(df(x) %^% f(x))  # should be zero
+```
+
+# Differential of the differential, $d^2=0$
+
+We can use the package to verify the celebrated fact that, for any
+$k$-form $\phi$, $d\left(d\phi\right)=0$.  The first step is to define
+scalar functions ```f1(), f2(), f3()```, all  $0$-forms:
+
+```{r}
+f1 <- function(w,x,y,z){w*x*y*z + sin(x) + cos(w)}
+f2 <- function(w,x,y,z){w^2*x*y*z + sin(w) + w+z}
+f3 <- function(w,x,y,z){w*y + x + (w*z)}
+```
+
+Now we need to define elementary $1$-forms:
+
+```{r}
+dw <- as.kform(1)
+dx <- as.kform(2)
+dy <- as.kform(3)
+dz <- as.kform(4)
+```
+
+
+I will demonstrate the theorem by defining a $2$-form which is the sum
+of three elementary two-forms, evaluated at a particular point in
+$\mathbb{R}^4$:
+
+```{r}
+phi <-
+  (
+    +f1(1,2,3,4) %^% dw %^% dx
+    +f2(1,2,3,4) %^% dw %^% dy
+    +f3(1,2,3,4) %^% dy %^% dz
+  )
+```
+
+We can use slightly slicker R idiom by defining elementary forms
+```e1,e2,e3``` and then defining phi to be a linear sum, weighted with
+$0$-forms given by the (scalar) functions:
+
+```{r}
+e1 <- dw %^% dx
+e2 <- dw %^% dy
+e3 <- dy %^% dz
+
+phi <-
+  (
+    +f1(1,2,3,4) %^% e1
+    +f2(1,2,3,4) %^% e2
+    +f3(1,2,3,4) %^% e3
+  )
+phi
+```
+
+
+Now to evaluate first derivatives of ```f1()``` etc at point $(1,2,3,4)$, using ```Deriv()```:
+
+```{r}
+Df1 <- Deriv(f1)(1,2,3,4)
+Df2 <- Deriv(f2)(1,2,3,4)
+Df3 <- Deriv(f3)(1,2,3,4)
+```
+
+So ```Df1``` etc are numeric vectors of length 4.  Calculating dphi is easy:
+
+```
+dphi <-
+  (
+    +grad(Df1) %^% e1
+    +grad(Df2) %^% e2
+    +grad(Df3) %^% e3
+  )
+```
+
+Now work on the differential of the differential.  First evaluate
+the Hessians (4x4 numeric matrices) at the same point:
+
+```{r}
+Hf1 <- matrix(Deriv(f1,nderiv=2)(1,2,3,4),4,4)
+Hf2 <- matrix(Deriv(f2,nderiv=2)(1,2,3,4),4,4)
+Hf3 <- matrix(Deriv(f3,nderiv=2)(1,2,3,4),4,4)
+```
+
+But $dd\phi$ is clearly zero as the Hessians are symmetrical:
+```{r}
+ddphi <- # should be zero
+  (  
+    +as.kform(which(!is.na(Hf1),arr.ind=TRUE),c(Hf1))
+    +as.kform(which(!is.na(Hf2),arr.ind=TRUE),c(Hf2))
+    +as.kform(which(!is.na(Hf3),arr.ind=TRUE),c(Hf3))
+  )
+
+ddphi
+```
+
+as expected.
+
+## Stokes's theorem
+
+In its most general form, Stokes's theorem states
+
+\[
+\int_{\partial X}\phi=\int_Xd\phi
+\]
+
+where $X\subset\mathbb{R}^n$ is a compact oriented $(k+1)$-dimensional
+manifold with boundary $\partial X$ and $\phi$ is a $k$-form defined
+on a neighborhood of $X$.
+
+We will verify Stokes, following 6.9.5 of Hubbard in which
+
+\[
+\phi=
+\left(x_1-x_2^2+x_3^3-\cdots\pm x_n^n\right)
+\left(
+\sum_{i=1}^n
+dx_1\wedge\cdots\wedge\widehat{dx_i}\wedge\cdots\wedge dx_n
+\right)
+\]
+
+(a hat indicates that a term is absent), and we wish to evaluate
+$\int_{\partial C_a}\phi$ where $C_a$ is the cube $0\leq x_j\leq a,
+1\leq j\leq n$.  Stokes tells us that this is equal to $\int_{C_a}
+d\phi$, which is given by
+
+\[
+d\phi = \left(
+1+2x_2+\cdots + nx_n^{n-1}\right)
+dx_1\wedge\cdots\wedge dx_n
+\]
+
+and so the volume integral is just
+
+\[
+\sum_{j=1}^n
+\int_{x_1=0}^a
+\int_{x_2=0}^a
+\cdots
+\int_{x_i=0}^a
+jx_j^{j-1}
+dx_1 dx_2\ldots dx_n=
+a^{n-1}\left(a+a^2+\cdots+a^n\right).
+\]
+
+Stokes's theorem, being trivial, is not amenable to direct numerical
+verification but the package does allow slick creation of $\phi$:
+
+```{r}
+phi <- function(x){
+    n <- length(x)
+    sum(x^seq_len(n)*rep_len(c(1,-1),n)) * as.kform(t(apply(diag(n)<1,2,which)))
+}
+phi(1:9)
+```
+
+Further, $d\phi$ is given by
+
+```{r}
+dphi <- function(x){
+    nn <- seq_along(x)
+    sum(nn*x^(nn-1)) * as.kform(seq_along(x))
+}
+dphi(1:9)
+```
+
+## References
+
+*  J. H. Hubbard and B. B. Hubbard 2015.  _Vector
+      calculus, linear algebra and differential forms: a unified
+      aproach_,  Ithaca, NY.
+*  M. Spivak 1971. _Calculus on manifolds_, Addison-Wesley.
