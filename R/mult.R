@@ -80,7 +80,7 @@
   ## with a repeated index, as in [1,3,4,1,2] ("1" appears twice).
   ## Then, sort the rows.  Then, sum over all orderings:
 
-    S %<>% lose_repeats
+    S <- lose_repeats(S)
     if(nrow(index(S))==0){  # the zero form
         return(S)
     }
@@ -119,7 +119,7 @@
 }
 
 `wedge2` <- function(F1,F2){
-
+  if(missing(F2)){return(F1)}
   if(`|`(!inherits(F1,"kform"), !inherits(F2,"kform"))){return(F1*F2)}
 
   if(is.empty(F1) | is.empty(F2)){
@@ -138,7 +138,7 @@
   n2 <- length(var2)
 
   f <- function(i){c(ind1[i[1],,drop=TRUE],ind2[i[2],,drop=TRUE])}
-  M <- expand.grid(seq_len(n1),seq_len(n2)) %>% apply(1,f) %>% t
+  M <- t(apply(expand.grid(seq_len(n1),seq_len(n2)),1,f))
   as.kform(M, c(outer(var1,var2)))
 }
 
@@ -259,3 +259,45 @@
     ktensor(spray(expand.grid(seq_len(nrow(M)),seq_len(ncol(M))),c(M)))
 }
 
+`transform` <- function(omega,M)
+{
+    Reduce(`+`,sapply(seq_along(value(omega)),
+                      function(i){
+                          do.call("wedge",
+                                  apply(
+                                      M[index(omega)[i,,drop=FALSE],,drop=FALSE],1,
+                                      as.1form))*value(omega)[i]},simplify=FALSE))
+}
+
+`issmall` <- function(x,tol=1e-8){  # tests for a kform being either zero or "small"
+    if(is.zero(x)){
+        return(TRUE)
+    } else {
+        error <- value(x)
+        if(all(abs(error)<tol)){
+            return(TRUE)
+        } else {
+            return(FALSE)
+        }
+    }
+}  # issmall() closes
+
+
+`stretch` <- function(omega,d){
+  M <- index(omega)
+  d <- d[seq_len(max(M))]
+  M[] <- d[M]  # the meat
+  as.kform(index(omega),value(omega)*apply(M,1,prod))
+}
+  
+`keep` <- function(omega,yes){
+    jj <- rep(0L,max(index(omega)))
+    jj[yes] <- 1
+    stretch(omega,jj)
+}
+
+`discard` <- function(omega,no){
+    jj <- rep(1L,max(index(omega)))
+    jj[no] <- 0L
+    stretch(omega,jj)
+}

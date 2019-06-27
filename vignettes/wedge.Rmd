@@ -15,14 +15,8 @@ Ordinary differential calculus may be generalized to
 arbitrary-dimensional oriented manifolds using the exterior calculus.
 Here I show how the wedge package furnishes functionality for working
 with the exterior calculus, and provide numerical verification of a
-number of theorems.
-
-Notation follows that of Spivak, and Hubbard and Hubbard.
-
-```{r,echo=FALSE,print=FALSE,results='hide'}
-require("wedge",quietly=TRUE,warn.conflicts=FALSE)
-require("Deriv",quietly=TRUE,warn.conflicts=FALSE)
-```
+number of theorems.  Notation follows that of Spivak, and Hubbard and
+Hubbard.
 
 Recall that a $k$-tensor is a multilinear map $S\colon
 V^k\longrightarrow\mathbb{R}$, where $V=\mathbb{R}^n$ is considered as
@@ -70,11 +64,23 @@ The space spanned by such products has a natural representation in R
 as an array of dimensions $n\times\cdots\times n$.  If ```A``` is such
 an array, then the element ```A[i_1,i_2,...,i_k]``` is the coefficient
 of $\phi_{i_1}\otimes\ldots\otimes\phi_{i_k}$.  However, it is more
-efficient and conceptually cleaner to consider a *sparse* array.
-Considering the case $n=5,k=4$
+efficient and conceptually cleaner to consider a *sparse* array, as
+implemented by the ```spray``` package.  We will consider the case
+$n=5,k=4$, so we have multilinear maps from
+$\left(\mathbb{R}^5\right)^4$ to $\mathbb{R}$.  Below, we will test
+algebraic identities in R using the idiom furnished by the wedge
+package.  For our example we will define
+$S=1.5\phi_5\otimes\phi_1\otimes\phi_1\otimes\phi_1+2.5\phi_1\otimes\phi_1\otimes\phi_2\otimes\phi_3+3.5\phi_1\otimes\phi_3\otimes\phi_4\otimes\phi_2$
+using a matrix with three rows, one per term, and whose rows
+correspond to each terms's cross products of the $\phi$'s.  We first
+have to load the ```wedge``` library:
 
-We can test these identities in R using the idiom furnished by the
-wedge package:
+```{r,message=FALSE}
+library("wedge")
+```
+
+Then the idiom is straightforward:
+
 
 ```{r}
 k <- 4
@@ -85,10 +91,12 @@ S <- as.ktensor(M,coeffs= 0.5 + 1:3)
 S
 ```
 
-So $S$ is a 4-tensor, mapping $V^4$ to $\mathbb{R}$, where
-$V=\mathbb{R}^5$.  Here we have
+Observe that, if stored as an array of size $n^k$, $S$ would have
+$5^4=625$ elements, all but three of which are zero.  So $S$ is a
+4-tensor, mapping $V^4$ to $\mathbb{R}$, where $V=\mathbb{R}^5$.  Here
+we have
 $S=1.5\phi_5\otimes\phi_1\otimes\phi_1\otimes\phi_1+2.5\phi_1\otimes\phi_1\otimes\phi_2\otimes\phi_3+3.5\phi_1\otimes\phi_3\otimes\phi_4\otimes\phi_2$.
-Note that on some implementations the row order of object ```S``` will
+Note that in some implementations the row order of object ```S``` will
 differ from that of ```M```.  We will define $E$ to be a random point
 in $V^k$ in terms of a matrix:
 
@@ -120,22 +128,26 @@ E2[,2] <- x2
 E3[,2] <- r1*x1 + r2*x2
 ```
 
-Then we can verify the multilinearity of $S$:
+Then we can verify the multilinearity of $S$ by coercing to a function
+which is applied to ```E1, E2, E3```:
 
 ```{r}
-
 f <- as.function(S)
-c(r1*f(E1) + r2*f(E2), f(E3)) # should match
+way1 <- r1*f(E1) + r2*f(E2)
+way2 <- f(E3)
+c(way1,way2)
 ```
 
-
-Note that this is *not* equivalent to linearity over $V^{nk}$:
+(that is, identical up to numerical precision).  Note that this is
+*not* equivalent to linearity over $V^{nk}$:
 
 
 ```{r}
 E1 <- matrix(rnorm(n*k),n,k)
 E2 <- matrix(rnorm(n*k),n,k)
-c(f(E1+E2),f(E1)+f(E2))
+way1 <- f(r1*E1+r2*E2)
+way2 <- r1*f(E1)+r2*f(E2)
+c(way1,way2)
 ```
 
 Given two k-tensor objects $S,T$ we can form the cross product
@@ -205,7 +217,7 @@ S1
 Alt(S1)
 ```
 
-And verifying that it is in fact alternating is straightforward:
+Verifying that ```S1``` is in fact alternating is straightforward:
 
 ```{r}
 E <- matrix(rnorm(8),4,2)
@@ -214,32 +226,44 @@ as.function(Alt(S1))(E) + as.function(Alt(S1))(Erev)  # should be zero
 ```
 
 However, we can see that this form for alternating tensors (here
-called $k$-forms) is inefficient and highly redundant.  The package
-provides ```kform``` objects which are inherently alternating; they are described using  wedge products which are discussed next.
+called $k$-forms) is inefficient and highly redundant: in this example
+there is a ```1 2``` term and a ```2 1``` term (the coefficients are
+equal and opposite).  In this example we have $k=2$ but in general
+there would be potentially $k!$ essentially repeated terms which
+collectively require only a single coefficient.  The package provides
+```kform``` objects which are inherently alternating using a more
+efficient representation; they are described using wedge products
+which are discussed next.
 
 ## Wedge products and the exterior calculus
 
 This section follows the exposition of Hubbard and Hubbard, who
 introduce the exterior calculus starting with a discussion of
-elementary forms.  An elementary form is an object such as $dx_1\wedge
-dx_3$, which is an alternating linear map from
+elementary forms, which are alternating forms with a particularly
+simple structure.  An elementary form is an alternating multilinear
+map with a particularly simple structure.  An example of an elementary
+form would be $dx_1\wedge dx_3$ [treated as an indivisible entity],
+which is an alternating multilinear map from
 $\mathbb{R}^n\times\mathbb{R}^n$ to $\mathbb{R}$ with
 
 \[
 \left(
 dx_1\wedge dx_3
 \right)\left(
-\begin{pmatrix}a_1\\a_3\\ \vdots\\ a_n\end{pmatrix},
-\begin{pmatrix}b_1\\b_3\\ \vdots\\ b_n\end{pmatrix}
+\begin{pmatrix}a_1\\a_2\\a_3\\ \vdots\\ a_n\end{pmatrix},
+\begin{pmatrix}b_1\\b_3\\b_3\\ \vdots\\ b_n\end{pmatrix}
 \right)=\mathrm{det}
 \begin{pmatrix} a_1 & b_1 \\ a_3 & b_3\end{pmatrix}
 =a_1b_3-a_3b_1
 \]
 
 That this is alternating follows from the properties of the
-determinant.  Because such objects are linear, it is possible to
-consider more complicated forms such as $dx_1\wedge dx_2 + 3
-dx_2\wedge dx_3$ with
+determinant.  In general of course, $dx_i\wedge dx_j\left(
+\begin{pmatrix}a_1\\ \vdots\\ a_n\end{pmatrix}, \begin{pmatrix}b_1\\
+\vdots\\ b_n\end{pmatrix} \right)=\mathrm{det} \begin{pmatrix} a_i &
+b_i \\ a_j & b_j\end{pmatrix}$.  Because such objects are linear, it
+is possible to consider sums of elementary forms, such as $dx_1\wedge
+dx_2 + 3 dx_2\wedge dx_3$ with
 
 \[
 \left(
@@ -253,7 +277,7 @@ dx_1\wedge dx_2 + 3dx_2\wedge dx_3
 \begin{pmatrix} a_2 & b_2\\ a_3 & b_3\end{pmatrix}
 \]
 
-or even $dx_1\wedge dx_2\wedge dx_3 +5dx_1\wedge dx_2\wedge dx_4$
+or even $K=dx_1\wedge dx_2\wedge dx_3 +5dx_1\wedge dx_2\wedge dx_4$
 which would be a linear map from $\left(\mathbb{R}^n\right)^3$ to
 $\mathbb{R}$ with
 
@@ -279,7 +303,9 @@ dx_4\wedge dx_2\wedge dx_3 +5dx_1\wedge dx_2\wedge dx_4
 \end{pmatrix}.
 \]
 
-Taking the last form as an example, this has ready R idiom:
+
+Defining $K$ has ready R idiom in which we define a matrix whose rows
+correspond to the differentials in each term:
 
 ```{r}
 M <- matrix(c(4,2,3,1,2,4),2,3,byrow=TRUE)
@@ -290,37 +316,19 @@ K
 
 Note that the order of the rows in ```K``` is immaterial and indeed in
 some implementations will appear in a different order: the wedge
-package uses the spray package, which in turn utilises the STL map
-class of C++.
-
-Spivak observes that $\Lambda^k(V)$ is spanned by the $n\choose k$
-wedge products of the form
-
-\[
-dx_{i_1}\wedge dx_{i_2}\wedge\ldots\wedge dx_{i_k}\qquad
-1\leq i_i<i_2<\cdots <i_k\leq n
-\]
-
-and these products are called elementary forms: every element of the
-space $\Lambda^k(V)$ is a linear combination of elementary forms, as
-illustrated in the package by function ```kform_general()```.
-Consider the following idiom:
-
-
-```{r}
-Krel <- kform_general(4,2,1:6)
-Krel
-```
-
-Object ```Krel``` is a two-form, specifically a map from
-$\left(\mathbb{R}^4\right)^2$ to $\mathbb{R}$.  Observe that
-```Krel``` has ${4\choose 2}=6$ components, which do not appear in any
-particular order.
+package uses the ```spray``` package, which in turn utilises the STL
+map class of C++.
 
 ## Formal definition of wedge product
 
-Given two alternating forms $\omega,\eta$, Spivak defines the wedge
-product $\omega\wedge\eta\in\Lambda^{k+l}(V)$ as
+In the previous section we defined objects such as "$dx_1\wedge dx_6$"
+as a single entity.  Here I define the elementary form $dx_i$ and the
+wedge product $\wedge$ formally.  The elementary form $dx_i$ is simply
+a map from $\mathbb{R}^n$ to $\mathbb{R}$ with
+$dx_i\left(x_1,x_2,\ldots,x_n\right)=x_i$.  The wedge product maps two
+alternating forms to another alternating form; given
+$\omega\in\Lambda^k(V)$ and $\eta\in\Lambda^l(V)$, Spivak defines the
+wedge product $\omega\wedge\eta\in\Lambda^{k+l}(V)$ as
 
 \[
 \omega\wedge\eta={k+l\choose k\,l}\operatorname{Alt}(\omega\otimes\eta)
@@ -340,6 +348,8 @@ K1 %^% K2
 
 ```
 
+(we might write the product as $-35dx_1\wedge dx_4\wedge dx_5\wedge
+dx_6\wedge dx_7 -21dx_1\wedge dx_3\wedge dx_4\wedge dx_5\wedge dx_6$).
 See how the wedge product eliminates rows with repeated entries,
 gathers permuted rows together (respecting the sign of the
 permutation), and expresses the result in terms of elementary forms.
@@ -370,8 +380,68 @@ nevertheless algebraically identical:
 (F1 %^% F2) %^% F3 - F1 %^% (F2 %^% F3)
 ```
 
+Spivak observes that $\Lambda^k(V)$ is spanned by
+the $n\choose k$ wedge products of the form
+
+\[
+dx_{i_1}\wedge dx_{i_2}\wedge\ldots\wedge dx_{i_k}\qquad
+1\leq i_i<i_2<\cdots <i_k\leq n
+\]
+
+where these products are the elementary forms: every element of the
+space $\Lambda^k(V)$ is a linear combination of elementary forms, as
+illustrated in the package by function ```kform_general()```.
+Consider the following idiom:
+
+
+```{r}
+Krel <- kform_general(4,2,1:6)
+Krel
+```
+
+Object ```Krel``` is a two-form, specifically a map from
+$\left(\mathbb{R}^4\right)^2$ to $\mathbb{R}$.  Observe that
+```Krel``` has ${4\choose 2}=6$ components, which do not appear in any
+particular order.  Addition of such $k$-forms is straightforward in R
+idiom but algebraically nontrivial:
+
+```{r}
+K1 <- as.kform(matrix(1:4,2,2),1:2)
+K2 <- as.kform(matrix(c(1,3,7,8,2,4),ncol=2,byrow=TRUE),c(-1,5,4))
+K1
+K2
+K1+K2
+```
+
+In the above, note how the $dx_2\wedge dx_4$ terms combine [to give
+```2 4 = 6```] and the $dx_1\wedge dx_3$ term vanishes.
+
 
 ## Exterior derivatives
+
+Given a $k$-form $\omega$, Spivak defines the differential of $\omega$
+to be a $(k+1)$-form $d\omega$ as follows.  If
+
+\[
+\omega =
+\sum_{
+i_1 < i_2 <\cdots<i_k}
+\omega_{i_1i_2\ldots i_k}
+dx^{i_1}\wedge
+dx^{i_2}\wedge\cdots\wedge dx^{i_k}
+\]
+
+then
+
+\[
+d\omega =
+\sum_{
+i_1 < i_2 <\cdots<i_k}
+\sum_{\alpha=1}^n D_\alpha\left(\omega_{i_1i_2\ldots i_k}\right)
+\cdot
+dx^{i_1}\wedge
+dx^{i_2}\wedge\cdots\wedge dx^{i_k}
+\]
 
 Hubbard and Hubbard define the exterior derivative $d\phi$ (they use a
 bold font, $\mathbf{d}\phi$) of the $k$-form $\phi$ as the
@@ -385,7 +455,12 @@ $(k+1)$-form given by
 \]
 
 which, by their own account, is a rather opaque mathematical idiom.
-However, the definition makes sense and it can be shown that
+However, the definition makes sense and it is consistent with Spivak's
+definition above.  The definition allows one to express the
+fundamental theorem of calculus in an arbitrary number of dimensions
+without modification.
+
+It can be shown that
 
 \[
     {d}\left(f\,dx_{i_1}\wedge\cdots\wedge dx_{i_k}\right)=
@@ -473,9 +548,9 @@ $k$-form $\phi$, $d\left(d\phi\right)=0$.  The first step is to define
 scalar functions ```f1(), f2(), f3()```, all  $0$-forms:
 
 ```{r}
-f1 <- function(w,x,y,z){w*x*y*z + sin(x) + cos(w)}
+f1 <- function(w,x,y,z){x + y^3 + x*y*w*z}
 f2 <- function(w,x,y,z){w^2*x*y*z + sin(w) + w+z}
-f3 <- function(w,x,y,z){w*y + x + (w*z)}
+f3 <- function(w,x,y,z){w*x*y*z + sin(x) + cos(w)}
 ```
 
 Now we need to define elementary $1$-forms:
@@ -520,15 +595,23 @@ phi
 ```
 
 
-Now to evaluate first derivatives of ```f1()``` etc at point $(1,2,3,4)$, using ```Deriv()```:
+Now to evaluate first derivatives of ```f1()``` etc at point
+$(1,2,3,4)$, using ```Deriv()``` from the Deriv package:
 
 ```{r}
+library("Deriv")
 Df1 <- Deriv(f1)(1,2,3,4)
 Df2 <- Deriv(f2)(1,2,3,4)
 Df3 <- Deriv(f3)(1,2,3,4)
 ```
 
-So ```Df1``` etc are numeric vectors of length 4.  Calculating dphi is easy:
+So ```Df1``` etc are numeric vectors of length 4, for example:
+
+```{r}
+Df1
+```
+
+Calculating dphi, or $d\phi$, is easy:
 
 ```
 dphi <-
@@ -548,7 +631,20 @@ Hf2 <- matrix(Deriv(f2,nderiv=2)(1,2,3,4),4,4)
 Hf3 <- matrix(Deriv(f3,nderiv=2)(1,2,3,4),4,4)
 ```
 
-But $dd\phi$ is clearly zero as the Hessians are symmetrical:
+```{r, echo=FALSE}
+rownames(Hf1) <- c("w","x","y","z")
+colnames(Hf1) <- c("w","x","y","z")
+```
+
+For example
+
+```{r}
+Hf1
+```
+
+(note the nonzero diagonal term).  But $dd\phi$ is clearly zero as the
+Hessians are symmetrical:
+
 ```{r}
 ddphi <- # should be zero
   (  
