@@ -1,15 +1,19 @@
 \name{transform}
 \alias{transform}
+\alias{pullback}
+\alias{pull-back}
+\alias{pushforward}
+\alias{push-forward}
 \alias{stretch}
 \title{Linear transforms of \eqn{k}-forms}
 \description{Given a \eqn{k}-form, express it in terms of linear
   combinations of the \eqn{dx^i}}
 \usage{
-transform(omega,M)
-stretch(omega,d)
+transform(K,M)
+stretch(K,d)
 }
 \arguments{
-  \item{omega}{Object of class \code{kform}}
+  \item{K}{Object of class \code{kform}}
   \item{M}{Matrix of transformation}
   \item{d}{Numeric vector representing the diagonal elements of a
     diagonal matrix}
@@ -97,14 +101,18 @@ matrix with zero off-diagonal elements.  It is much faster.
 
 }
 \value{Returns a \eqn{k}-form}
+\references{
+  S. H. Weintraub 2019. \emph{Differential forms: theory and practice}.
+  Elsevier.  (Chapter 3)
+}
 \author{Robin K. S. Hankin}
 \seealso{\code{\link{wedge}}}
 \examples{
 
 # Example in the text:
-omega <- as.kform(matrix(c(1,1,2,3),2,2),c(1,5))
+K <- as.kform(matrix(c(1,1,2,3),2,2),c(1,5))
 M <- matrix(1:9,3,3)
-transform(omega,M)
+transform(K,M)
 
 # Demonstrate that the result can be complicated:
 M <- matrix(rnorm(25),5,5)

@@ -6,13 +6,12 @@
 \alias{kform_general}
 \alias{general_kform}
 \title{k-forms}
-\description{
-Functionality for dealing with \eqn{k}-forms.
- }
+\description{Functionality for dealing with \eqn{k}-forms}
 \usage{
-as.kform(M,coeffs)
+kform(S)
+as.kform(M,coeffs,lose=TRUE)
 kform_basis(n, k)
-kform_general(W,k,coeffs)
+kform_general(W,k,coeffs,lose=TRUE)
 \method{as.function}{kform}(x,...)
 }
 \arguments{
@@ -21,15 +20,16 @@ kform_general(W,k,coeffs)
   \item{W}{Integer vector of dimensions}
   \item{M}{Index matrix for a \eqn{k}-form}
   \item{coeffs}{Coefficients of the \eqn{k}-form}
+  \item{S}{Object of class \code{spray}}
+  \item{lose}{Boolean, with default \code{TRUE} meaning to coerce a
+    \eqn{0}-form to a scalar and \code{FALSE} meaning to return the
+    formal \eqn{0}-form}
   \item{x}{Object of class \code{kform}}
   \item{...}{Further arguments, currently ignored}
 }
 \details{
 
-  A \dfn{\eqn{k}-form} is an alternating \eqn{k}-tensor.  In the
-  \pkg{wedge} package, an object of class \code{kform} is a natural and
-  efficient representation of an alternating \eqn{k}-tensor that allows
-  one to use operations such as wedge products.
+  A \dfn{\eqn{k}-form} is an alternating \eqn{k}-tensor.  
 
   Recall that a \eqn{k}-tensor is a multilinear map from \eqn{V^k} to
   the reals, where \eqn{V=R^n} is a vector space.  A multilinear
@@ -56,6 +56,12 @@ and in fact
 where \eqn{\mathbf{e}_j,1\leq j\leq k}{e_j,1<=j<=k} is a basis for
 \eqn{V}.
 
+In the \pkg{wedge} package, \eqn{k}-forms are represented as sparse
+arrays (\code{spray} objects), but with a class of \code{c("kform",
+"spray")}.  The constructor function (\code{kform()}) ensures that rows
+of the index matrix are strictly nonnegative integers, have no repeated
+entries, and are strictly increasing.
+
 }
 \references{Hubbard and Hubbard; Spivak}
 \author{Robin K. S. Hankin}
@@ -63,7 +69,7 @@ where \eqn{\mathbf{e}_j,1\leq j\leq k}{e_j,1<=j<=k} is a basis for
   Hubbard and Hubbard use the term \dQuote{\eqn{k}-form}, but Spivak
   does not.
 }
-\seealso{\code{\link{ktensor}}}
+\seealso{\code{\link{ktensor}},\code{\link{lose}}}
 \examples{
 
 as.kform(cbind(1:5,2:6),rnorm(5))

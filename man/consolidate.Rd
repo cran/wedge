@@ -1,12 +1,16 @@
 \name{consolidate}
 \alias{consolidate}
 \alias{lose_repeats}
+\alias{kill_trivial_rows}
 \alias{include_perms}
 \title{Various low-level helper functions}
-\description{Various low-level helper functions used in \code{Alt()}}
+\description{
+  Various low-level helper functions used in \code{Alt()} and
+  \code{kform()}
+}
 \usage{
 consolidate(S)
-lose_repeats(S)
+kill_trivial_rows(S)
 include_perms(S)
 }
 \arguments{
@@ -16,11 +20,11 @@ include_perms(S)
   Low-level helper functions.
 
   \itemize{
-    \item Function \code{consolidate()} takes rows of a spray object
-    that are identical up to a permutation and merges them, respecting
+    \item Function \code{consolidate()} takes a spray object, and
+    combines any rows that are identical up to a permutation, respecting
     the sign of the permutation
-    \item Function \code{lose_repeats()} deletes rows of a spray object
-    that contain the same entry more than once (which have \eqn{k}-forms
+    \item Function \code{kill_trivial_rows()} takes a spray object and
+    deletes any rows with a repeated entry (which have \eqn{k}-forms
     identically zero)
     \item Function \code{include_perms()} replaces each row of a
     \code{spray} object with all its permutations, respecting the sign
@@ -32,10 +36,10 @@ include_perms(S)
 \examples{
 
 S <- spray(matrix(c(1,1,2,2,1,3,3,1,3,5),ncol=2,byrow=TRUE),1:5)
-lose_repeats(S)
+kill_trivial_rows(S)
 consolidate(S)
 
 \dontrun{include_perms(S)} #  This will fail because of the repeated rows
-include_perms(lose_repeats(S)) # This should work
+include_perms(kill_trivial_rows(S)) # This should work
 
 }
